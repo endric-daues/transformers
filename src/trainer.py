@@ -139,16 +139,15 @@ class Trainer(ABC):
                             "iter": iter_num,
                             "train/loss": loss,
                             "lr": lr,
-                            "mfu": running_mfu * 100,  # convert to percentage
+                            # "mfu": running_mfu * 100,  # convert to percentage
                         }
                     )
-
-                iter_num += 1
 
                 if iter_num % self.config.eval_interval == 0:
                     val_i = 0
                     self.logger.info("Starting Validation ...")
                     self.model.eval()
+                    losses = torch.zeros(self.config.max_val_iters)
                     self.logger.info(f"Loading validation dataset..")
                     validation_dataloader = DataLoader(
                         validation_dataset,
@@ -166,18 +165,19 @@ class Trainer(ABC):
                             X, Y = val_data
                             X, Y = X.to(self.config.device), Y.to(self.config.device)
                             logits, loss = self.model(X, Y)
-
-                            if self.config.wandb_log:
-                                wandb.log(
-                                    {
-                                        "iter": iter_num + val_i,
-                                        "val/loss": loss,
-                                    }
-                                )
-                        val_i += 1
-
+                            losses[val_i] = loss
                         if val_i % self.config.max_val_iters == 0:
                             break
+                        val_i += 1
+                    val_loss = losses.mean()
+                    if self.config.wandb_log:
+                        wandb.log(
+                            {
+                                "iter": iter_num,
+                                "val/loss": val_loss,
+                            },
+                            commit=False,
+                        )
                     self.logger.info("Completed validation")
                     self.model.train()
 
@@ -194,6 +194,7 @@ class Trainer(ABC):
                         checkpoint, os.path.join(self.experiment_dpath, "ckpt.pt")
                     )
                     break
+                iter_num += 1
 
     def get_lr(self, it):
         """Compute adaptive learning rate using cosine decay."""

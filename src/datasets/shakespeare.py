@@ -1,5 +1,5 @@
 import os
-from typing import Literal
+from typing import Literal, Optional
 import requests
 import numpy as np
 
