@@ -15,7 +15,7 @@ class TrainerConfig:
     experiments_dpath: str = f"{base_path}/experiments"
     data_dpath: str = f"{base_path}/data/shakespeare"
     tokenizer_dpath: str = f"{base_path}/tokenizers"
-    eval_interval: int = 10
+    eval_interval: int = 500
     init_from: Literal[
         "scratch", "resume", "gpt2"
     ] = "scratch"  # 'scratch' or 'resume' or 'gpt2*'

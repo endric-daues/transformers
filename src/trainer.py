@@ -143,7 +143,7 @@ class Trainer(ABC):
                         }
                     )
 
-                if iter_num % self.config.eval_interval == 0:
+                if (iter_num % self.config.eval_interval == 0) and (iter_num != 0):
                     val_i = 0
                     self.logger.info("Starting Validation ...")
                     self.model.eval()
