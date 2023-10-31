@@ -10,7 +10,6 @@ class TrainerConfig:
     """Configuration for trainer class."""
 
     base_path = os.environ.get("TRANSFORMER_BASE_PATH_LINUX")
-
     # path configs
     experiments_dpath: str = f"{base_path}/experiments"
     data_dpath: str = f"{base_path}/data/shakespeare"
@@ -37,7 +36,7 @@ class TrainerConfig:
     bias: bool = False  # do we use bias inside LayerNorm and Linear layers?
     # adamw optimizer
     learning_rate: float = 6e-4  # max learning rate
-    max_iters: int = 10000  # total number of training iterations
+    max_iters: int = 5000  # total number of training iterations
     max_val_iters: int = 100
     weight_decay: float = 1e-1
     beta1: float = 0.9
@@ -46,7 +45,7 @@ class TrainerConfig:
     # learning rate decay settings
     decay_lr: bool = True  # whether to decay the learning rate
     warmup_iters: int = 500  # how many steps to warm up for
-    lr_decay_iters: int = 10000  # should be ~= max_iters per Chinchilla
+    lr_decay_iters: int = 5000  # should be ~= max_iters per Chinchilla
     min_lr: float = (
         6e-5  # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
     )

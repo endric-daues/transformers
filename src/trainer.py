@@ -30,21 +30,21 @@ class Trainer(ABC):
         self.seed_offset = 0
         self.ddp_world_size = 1
 
-        self.experiment_dpath = os.path.join(
-            self.config.experiments_dpath, str(datetime.now())
-        )
-
         self._set_logger()
         self._configure_dtypes()
         self._configure_model()
-        if self.config.wandb_log:
-            self._configure_wandb()
 
+        self.experiment_dpath = os.path.join(
+            self.config.experiments_dpath, str(datetime.now())
+        )
         self.logger.info("Experiment Directory: %s", self.experiment_dpath)
-        self.logger.info("Trainer Configured: Ready to Go!")
 
     def train(self):
         """Caller method for GPT pretraining on next token prediction task."""
+        if self.master_process and self:
+            os.makedirs(self.experiment_dpath, exist_ok=True)
+        if self.config.wandb_log:
+            self._configure_wandb()
 
         scaler = torch.cuda.amp.GradScaler(enabled=(self.config.dtype == "float16"))
 
@@ -71,6 +71,8 @@ class Trainer(ABC):
 
         checkpoint = None  # free up memory
         t0 = time.time()
+        best_val = 1e12
+        val_loss = 1e12
         raw_model = (
             self.model.module if self.config.ddp else self.model
         )  # unwrap DDP container if needed
@@ -181,7 +183,7 @@ class Trainer(ABC):
                     self.logger.info("Completed validation")
                     self.model.train()
 
-                if iter_num == self.config.max_iters:
+                if val_loss < best_val:
                     checkpoint = {
                         "model": self.model.state_dict(),
                         "optimizer": optimizer.state_dict(),
@@ -193,7 +195,10 @@ class Trainer(ABC):
                     torch.save(
                         checkpoint, os.path.join(self.experiment_dpath, "ckpt.pt")
                     )
+
+                if iter_num == self.config.max_iters:
                     break
+
                 iter_num += 1
 
     def get_lr(self, it):
@@ -238,7 +243,10 @@ class Trainer(ABC):
         # model
         if self.sample_config.init_from == "resume":
             # init from a model saved in a specific directory
-            ckpt_path = os.path.join(self.experiment_dpath, "ckpt.pt")
+            self.logger.info(
+                f"Loading experiment from: {self.sample_config.experiment_dpath}"
+            )
+            ckpt_path = os.path.join(self.sample_config.experiment_dpath, "ckpt.pt")
             checkpoint = torch.load(ckpt_path, map_location=self.sample_config.device)
 
             self.logger.info(checkpoint["model_args"])
@@ -265,8 +273,9 @@ class Trainer(ABC):
         if (
             self.sample_config.init_from == "resume" and "config" in checkpoint
         ):  # older checkpoints might not have these...
-            meta_path = os.path.join("data", self.tokenizer_dpath, "meta.pkl")
+            meta_path = os.path.join("data", self.config.tokenizer_dpath, "meta.pkl")
             load_meta = os.path.exists(meta_path)
+            self.logger.info(f"Meta Loaded: {load_meta}, path: {meta_path}")
         if load_meta:
             print(f"Loading meta from {meta_path}...")
             with open(meta_path, "rb") as f:
@@ -324,8 +333,6 @@ class Trainer(ABC):
         self.model.to(self.config.device)
 
     def _configure_dtypes(self):
-        if self.master_process:
-            os.makedirs(self.experiment_dpath, exist_ok=True)
         torch.manual_seed(1337 + self.seed_offset)
         torch.cuda.manual_seed(1337)
         torch.backends.cuda.matmul.allow_tf32 = True  # allow tf32 on matmul

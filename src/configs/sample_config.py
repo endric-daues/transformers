@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Literal
+import os
+from typing import Literal, Optional
 import torch
 
 
@@ -7,6 +8,7 @@ import torch
 class SampleConfig:
     """Configuration for call to model generate method."""
 
+    base_path = os.environ.get("TRANSFORMER_BASE_PATH_LINUX")
     init_from: str = (
         "resume"  # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
     )
@@ -25,3 +27,4 @@ class SampleConfig:
         else "float16"
     )
     compile = False  # use PyTorch 2.0 to compile the model to be faster
+    experiment_dpath: str = f"{base_path}/experiments/2023-10-30 14:53:43.072876"
