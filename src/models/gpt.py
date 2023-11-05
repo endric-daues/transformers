@@ -1,17 +1,23 @@
 import math
 import inspect
+import logging
+import sys
+from typing import List
 
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from models.utils import LayerNorm, Block
+from models.utils import LayerNorm, MLP
 from models.configs.gpt_config import GPTConfig
+from models.attention import CausalSelfAttention
 
 
 class GPT(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self._set_logger()
+        self.logger.info("Initializing GPT model...")
         assert config.vocab_size is not None
         assert config.block_size is not None
         self.config = config
@@ -39,7 +45,10 @@ class GPT(nn.Module):
                 )
 
         # report number of parameters
-        print("number of parameters: %.2fM" % (self.get_num_params() / 1e6,))
+        self.logger.info("Model initialized. Ready to go...")
+        self.logger.info(
+            "number of parameters: %fM", self.get_num_params() / 1e6
+        )  # .2f
 
     def get_num_params(self, non_embedding=True):
         """
@@ -66,13 +75,13 @@ class GPT(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, idx, targets=None):
+        """Forward pass implementation for GPT model"""
         device = idx.device
         b, t = idx.size()
         assert (
             t <= self.config.block_size
         ), f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
         pos = torch.arange(0, t, dtype=torch.long, device=device)  # shape (t)
-
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx)  # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos)  # position embeddings of shape (t, n_embd)
@@ -94,13 +103,15 @@ class GPT(nn.Module):
                 x[:, [-1], :]
             )  # note: using list [-1] to preserve the time dim
             loss = None
-
         return logits, loss
 
     def crop_block_size(self, block_size):
-        # model surgery to decrease the block size if necessary
-        # e.g. we may load the GPT2 pretrained model checkpoint (block size 1024)
-        # but want to use a smaller block size for some smaller, simpler model
+        """Model surgery to decrease the block size if necessary
+
+        e.g. we may load the GPT2 pretrained model checkpoint (block size 1024)
+        but want to use a smaller block size for some smaller, simpler model
+        """
+
         assert block_size <= self.config.block_size
         self.config.block_size = block_size
         self.transformer.wpe.weight = nn.Parameter(
@@ -111,14 +122,16 @@ class GPT(nn.Module):
                 block.attn.bias = block.attn.bias[:, :, :block_size, :block_size]
 
     @classmethod
-    def from_pretrained(cls, model_type, override_args=None):
+    def from_pretrained(
+        cls, model_type, override_args=None
+    ):  # TODO: Consider moving this to the trainer as well
+        """Load pre-trained model"""  # TODO: check if this works
         assert model_type in {"gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl"}
         override_args = override_args or {}  # default to empty dict
         # only dropout can be overridden see more notes below
         assert all(k == "dropout" for k in override_args)
-        from transformers import GPT2LMHeadModel
 
-        print("loading weights from pretrained gpt: %s" % model_type)
+        print(f"loading weights from pretrained gpt: {model_type}")
 
         # n_layer, n_head and n_embd are determined from model_type
         config_args = {
@@ -145,6 +158,8 @@ class GPT(nn.Module):
         ]  # discard this mask / buffer, not a param
 
         # init a huggingface/transformers model
+        from transformers import GPT2LMHeadModel
+
         model_hf = GPT2LMHeadModel.from_pretrained(model_type)
         sd_hf = model_hf.state_dict()
 
@@ -162,8 +177,9 @@ class GPT(nn.Module):
             "mlp.c_fc.weight",
             "mlp.c_proj.weight",
         ]
-        # basically the openai checkpoints use a "Conv1D" module, but we only want to use a vanilla Linear
-        # this means that we have to transpose these weights when we import them
+        # basically the openai checkpoints use a "Conv1D" module,
+        # but we only want to use a vanilla Linear this means that
+        # we have to transpose these weights when we import them
         assert len(sd_keys_hf) == len(
             sd_keys
         ), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"
@@ -181,7 +197,14 @@ class GPT(nn.Module):
 
         return model
 
-    def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
+    def configure_optimizers(
+        self,
+        weight_decay: float,
+        learning_rate: float,
+        betas: List[float],
+        device_type: str,
+    ):
+        """Configure optimization parameter groups and decay rates."""
         # start with all of the candidate parameters
         param_dict = {pn: p for pn, p in self.named_parameters()}
         # filter out those that do not require grad
@@ -259,3 +282,22 @@ class GPT(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1)
 
         return idx
+
+    def _set_logger(self):
+        logging.basicConfig(stream=sys.stdout)
+        self.logger = logging.getLogger("GPT")
+        self.logger.setLevel(logging.DEBUG)
+
+
+class Block(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
+        self.attn = CausalSelfAttention(config)
+        self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
+        self.mlp = MLP(config)
+
+    def forward(self, x):
+        x = x + self.attn(self.ln_1(x))
+        x = x + self.mlp(self.ln_2(x))
+        return x

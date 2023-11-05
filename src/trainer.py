@@ -2,12 +2,12 @@ import logging
 import math
 import os
 import sys
-import time
 from abc import ABC
 from contextlib import nullcontext
 import pickle
 from dataclasses import asdict
 from datetime import datetime
+from typing import List
 
 import torch
 from torch.utils.data import DataLoader
@@ -26,57 +26,38 @@ class Trainer(ABC):
     def __init__(self) -> None:
         self.config = TrainerConfig()
         self.sample_config = None
-        self.master_process = True
-        self.seed_offset = 0
-        self.ddp_world_size = 1
 
         self._set_logger()
         self._configure_dtypes()
-        self._configure_model()
-
-        self.experiment_dpath = os.path.join(
-            self.config.experiments_dpath, str(datetime.now())
-        )
-        self.logger.info("Experiment Directory: %s", self.experiment_dpath)
 
     def train(self):
         """Caller method for GPT pretraining on next token prediction task."""
-        if self.master_process and self:
-            os.makedirs(self.experiment_dpath, exist_ok=True)
+        # Generate training directory
+        experiment_dpath = os.path.join(
+            self.config.experiments_dpath, str(datetime.now())
+        )
+        self.logger.info("Experiment Directory: %s", experiment_dpath)
+        os.makedirs(experiment_dpath, exist_ok=True)
+        # Set up WandB experiment
         if self.config.wandb_log:
             self._configure_wandb()
-
-        scaler = torch.cuda.amp.GradScaler(enabled=(self.config.dtype == "float16"))
-
-        self.master_process = True
-        self.seed_offset = 0
-        self.ddp_world_size = 1
-
-        tokens_per_iter = (
-            self.config.gradient_accumulation_steps
-            * self.ddp_world_size
-            * self.config.batch_size
-            * self.config.block_size
-        )
-        self.logger.info(f"tokens per iteration will be: {tokens_per_iter:,}")
-
-        iter_num = 0
-
+        # Configure model and optimizer
+        self._configure_model()
+        scaler = torch.cuda.amp.GradScaler(enabled=self.config.dtype == "float16")
         optimizer = self.model.configure_optimizers(
             self.config.weight_decay,
             self.config.learning_rate,
             (self.config.beta1, self.config.beta2),
             self.config.device_type,
         )
+        # Training info
+        tokens_per_iter = self.config.batch_size * self.config.block_size
+        self.logger.info("tokens per iteration will be: %d", tokens_per_iter)
 
-        checkpoint = None  # free up memory
-        t0 = time.time()
+        iter_num = 0
+        checkpoint = None
         best_val = 1e12
         val_loss = 1e12
-        raw_model = (
-            self.model.module if self.config.ddp else self.model
-        )  # unwrap DDP container if needed
-        running_mfu = -1.0
 
         self.logger.info("Defining training dataset...")
         train_dataset = Shakespeare(
@@ -95,7 +76,7 @@ class Trainer(ABC):
 
         self.logger.info("Starting Training...")
         for epoch in range(self.config.epochs):
-            self.logger.info(f"Starting Epoch {epoch}...")
+            self.logger.info("Starting Epoch %s", epoch)
             self.logger.info("Loading training dataset..")
             training_dataloader = DataLoader(
                 train_dataset,
@@ -106,25 +87,24 @@ class Trainer(ABC):
                 shuffle=False,
             )
             for data in training_dataloader:
-                self.logger.debug(f"Step: {iter_num}")
+                self.logger.debug("Step: %d", iter_num)
                 lr = (
                     self.get_lr(iter_num)
                     if self.config.decay_lr
                     else self.config.learning_rate
                 )
-                self.logger.debug(f"Learning Rate: {lr}")
+                self.logger.debug("Learning Rate: %d", lr)
                 for param_group in optimizer.param_groups:
                     param_group["lr"] = lr
 
-                with self.ctx:
-                    X, Y = data
-                    X, Y = X.to(self.config.device), Y.to(self.config.device)
-                    logits, loss = self.model(X, Y)
-                    loss = loss / self.config.gradient_accumulation_steps
-                self.logger.debug(f"Train Loss: {loss:.4f}")
+                with self.ctx:  # TODO: Understand gradient accumulation steps
+                    x, y = data
+                    x, y = x.to(self.config.device), y.to(self.config.device)
+                    _, loss = self.model(x, y)
+                self.logger.debug("Train Loss: %f", loss)
                 scaler.scale(loss).backward()
 
-                if self.config.grad_clip != 0.0:
+                if self.config.grad_clip != 0.0:  # TODO: Understand grad clip
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(
                         self.model.parameters(), self.config.grad_clip
@@ -150,7 +130,7 @@ class Trainer(ABC):
                     self.logger.info("Starting Validation ...")
                     self.model.eval()
                     losses = torch.zeros(self.config.max_val_iters)
-                    self.logger.info(f"Loading validation dataset..")
+                    self.logger.info("Loading validation dataset...")
                     validation_dataloader = DataLoader(
                         validation_dataset,
                         batch_size=self.config.batch_size,
@@ -162,11 +142,13 @@ class Trainer(ABC):
 
                     self.logger.debug("Instantiating loss object")
                     for val_data in validation_dataloader:
-                        self.logger.debug(f"Validation Step: {val_i}")
+                        self.logger.debug("Validation Step: %d", val_i)
                         with self.ctx:
-                            X, Y = val_data
-                            X, Y = X.to(self.config.device), Y.to(self.config.device)
-                            logits, loss = self.model(X, Y)
+                            x_val, y_val = val_data
+                            x_val, y_val = x_val.to(self.config.device), y_val.to(
+                                self.config.device
+                            )
+                            _, loss = self.model(x_val, y_val)
                             losses[val_i] = loss
                         if val_i % self.config.max_val_iters == 0:
                             break
@@ -191,10 +173,8 @@ class Trainer(ABC):
                         "iter_num": iter_num,
                         "config": self.config,
                     }
-                    print(f"saving checkpoint to {self.experiment_dpath}")
-                    torch.save(
-                        checkpoint, os.path.join(self.experiment_dpath, "ckpt.pt")
-                    )
+                    print(f"saving checkpoint to {experiment_dpath}")
+                    torch.save(checkpoint, os.path.join(experiment_dpath, "ckpt.pt"))
 
                 if iter_num == self.config.max_iters:
                     break
@@ -222,7 +202,8 @@ class Trainer(ABC):
     def sample(self):
         """Caller method to generate text sample from pretrained GPT model.
 
-        This method utilizes the latest model artifact for sampling.
+        This method utilizes a specified model artifact for sampling, provided
+        by passing an experiment directory.
         """
         self.sample_config = SampleConfig()
 
@@ -244,14 +225,14 @@ class Trainer(ABC):
         if self.sample_config.init_from == "resume":
             # init from a model saved in a specific directory
             self.logger.info(
-                f"Loading experiment from: {self.sample_config.experiment_dpath}"
+                "Loading experiment from: %s", self.sample_config.experiment_dpath
             )
             ckpt_path = os.path.join(self.sample_config.experiment_dpath, "ckpt.pt")
             checkpoint = torch.load(ckpt_path, map_location=self.sample_config.device)
 
             self.logger.info(checkpoint["model_args"])
             gpt_config = GPTConfig()
-            self.model = GPT(gpt_config)
+            self.model = GPT(gpt_config)  # TODO: Consider moving this to another method
             state_dict = checkpoint["model"]
             unwanted_prefix = "_orig_mod."
             for k, v in list(state_dict.items()):
@@ -270,38 +251,26 @@ class Trainer(ABC):
             self.model = torch.compile(self.model)
 
         load_meta = False
-        if (
-            self.sample_config.init_from == "resume" and "config" in checkpoint
-        ):  # older checkpoints might not have these...
+        if self.sample_config.init_from == "resume" and "config" in checkpoint:
             meta_path = os.path.join("data", self.config.tokenizer_dpath, "meta.pkl")
             load_meta = os.path.exists(meta_path)
-            self.logger.info(f"Meta Loaded: {load_meta}, path: {meta_path}")
+            self.logger.info("Meta Loaded: %s, path: %s", load_meta, meta_path)
         if load_meta:
-            print(f"Loading meta from {meta_path}...")
             with open(meta_path, "rb") as f:
                 meta = pickle.load(f)
-            # TODO want to make this more general to arbitrary encoder/decoder schemes
             stoi, itos = meta["token_id_map"], meta["id_token_map"]
-            # self.logger.info(f"l: {l}")
 
-            def encode(s):
+            def encode(s: str):
                 return [stoi[c] for c in s]
 
-            def decode(l):
+            def decode(ids: List[int]):
                 result = ""
-                for i in l:
+                for i in ids:
                     if i in itos:
                         result += itos[i]
                     else:
                         result += "[UNK]"
                 return result
-
-        # else:
-        #     # ok let's assume gpt-2 encodings by default
-        #     print("No meta.pkl found, assuming GPT-2 encodings...")
-        #     enc = tiktoken.get_encoding("gpt2")
-        #     encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
-        #     decode = lambda l: enc.decode(l)
 
         # encode the beginning of the prompt
         if self.sample_config.start.startswith("FILE:"):
@@ -333,7 +302,7 @@ class Trainer(ABC):
         self.model.to(self.config.device)
 
     def _configure_dtypes(self):
-        torch.manual_seed(1337 + self.seed_offset)
+        torch.manual_seed(1337)
         torch.cuda.manual_seed(1337)
         torch.backends.cuda.matmul.allow_tf32 = True  # allow tf32 on matmul
         torch.backends.cudnn.allow_tf32 = True  # allow tf32 on cudnn

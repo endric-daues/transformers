@@ -8,8 +8,9 @@ parser.add_argument("--action", required=True)
 
 if __name__ == "__main__":
     cfg = parser.parse_args()
-    trainer = Trainer()
-
+    trainer = (
+        Trainer()
+    )  # TODO: move this one layer down and add a sampler and predictor class.
     if cfg.action == "train":
         trainer.train()
     if cfg.action == "sample":

@@ -9,9 +9,17 @@ class Tokenizer(ABC):
         self.tokenizer_dpath: str = tokenizer_dpath
         self.vocab_size: int = 0
 
+    def __len__(self):
+        """Return vocab size."""
+        return self.vocab_size
+
     @abstractmethod
     def _load_tokenizer(self):
         """Load tokenizer from file"""
+
+    @abstractmethod
+    def _build_tokenizer(self):
+        """Build tokenizer from scratch"""
 
     @abstractmethod
     def encode(self, text: str) -> List[int]:

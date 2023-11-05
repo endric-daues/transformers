@@ -27,4 +27,4 @@ class SampleConfig:
         else "float16"
     )
     compile = False  # use PyTorch 2.0 to compile the model to be faster
-    experiment_dpath: str = f"{base_path}/experiments/2023-10-30 14:53:43.072876"
+    experiment_dpath: str = f"{base_path}/experiments/2023-10-31 17:29:44.410664"
