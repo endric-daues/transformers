@@ -128,8 +128,8 @@ where
 
 ```math
 \begin{align*}
-Q = XW_q + b_q  
-K = XW_k + b_k   
+Q = XW_q + b_q  </br>
+K = XW_k + b_k   </br>
 V = XW_v + b_v
 \end{align*}  
 ```
