@@ -126,7 +126,7 @@ Given input $X \in R[B, T, C]$ we compute the attention
 
 where
 
-g```math
+```math
 Q = XW_q + b_q
 K = XW_k + b_k
 V = XW_v + b_v
