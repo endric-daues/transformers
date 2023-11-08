@@ -118,13 +118,15 @@ We need a central script to load the action (train, sample, predict) and instant
 
 We utilize the following notation
 
+Given input $X \in R[B, T, C]$ we compute the attention 
+
 ```math
-Given input $ X \in R[B, T, C]$ we compute the attention <br>
-
 \text{Attention(Q, K, V)} = \text{softmax}({\frac{QK^T}{\sqrt{\text{n emb}}}}) V
+```
 
-\text{where}
+where
 
+g```math
 Q = XW_q + b_q
 K = XW_k + b_k
 V = XW_v + b_v
