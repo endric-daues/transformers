@@ -134,7 +134,7 @@ V = XW_v + b_v
 
 Thanks to the matrix multiplication visualizer, we can take a specific parameterization, such as $[B, T, C] = [1, 5, 2]$ to visualize the mechanism end to end.
 
-![Attention](images/end_to_end_attention.png)
+![Attention](src/notebooks/images/end_to_end_attention.png)
 
 More details are provided in a step-by-step walkthrough in the notebook including
 * General Single Head Attention
