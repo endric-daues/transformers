@@ -127,11 +127,9 @@ Given input $X \in R[B, T, C]$ we compute the attention
 where
 
 ```math
-\begin{align*}
-Q = XW_q + b_q  </br>
-K = XW_k + b_k   </br>
+Q = XW_q + b_q  \\
+K = XW_k + b_k   \\
 V = XW_v + b_v
-\end{align*}  
 ```
 
 Thanks to the matrix multiplication visualizer, we can take a specific parameterization, such as $[B, T, C] = [1, 5, 2]$ to visualize the mechanism end to end.
