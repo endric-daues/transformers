@@ -322,7 +322,7 @@ class Trainer(ABC):
     def _set_logger(self):
         logging.basicConfig(stream=sys.stdout)
         self.logger = logging.getLogger("train")
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.INFO)
 
     def _configure_wandb(self):
         self.wandb = wandb
