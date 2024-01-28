@@ -1,8 +1,13 @@
 # Transformers
 
+<div style="text-align: center;">
+    <img src="images/cover.png" alt="Attention" width="750" height="408">
+    <p>Shakespeare Plays Dataset</p>
+</div>
+
 ## Introduction
 
-This repository is a summary of sorts, as well as a collection of notes and experiments, a snapshot of my current stage of understanding transformer models, and a glimpse of how I like to structure my modeling code. First and foremost, this code is based on Kaparthy's nanoGPT repo (https://github.com/karpathy/nanoGPT) and the accompanying YouTube walk-through (link)[https://www.youtube.com/watch?v=kCc8FmEb1nY], which I found to be an excellent starting point - no-frills PyTorch model code and multi-GPU configuration, and some gems sprinkled here and there such as Flash attention, weight-tying, and ready to use GPT-2 loading.
+This repository is a summary of sorts, as well as a collection of notes and experiments, a snapshot of my current stage of understanding transformer models, and a glimpse of how I like to structure my modeling code. First and foremost, this code is based on Kaparthy's nanoGPT [repo](https://github.com/karpathy/nanoGPT) and the accompanying [YouTube walk-through](https://www.youtube.com/watch?v=kCc8FmEb1nY), which I found to be an excellent starting point - no-frills PyTorch model code and multi-GPU configuration, and some gems sprinkled here and there such as Flash attention, weight-tying, and ready to use GPT-2 loading.
 
 Nevertheless, this was only a starting point. I split the monolithic script into dataset, tokenizer, model, trainer sections, and expanded the config-based runner to allow for a well-documented experiment setup. Modularizing this code makes it easier to exchange the GPT model with a BERT or RoBERTa model, or switch out the character-level tokenizer with a byte-pair encoding setup, or some other fancy pre-trained module. The PyTorch DataLoader seems like a useful feature for maximizing compute utilization in larger training runs, and inheriting a base class means one can easily configure different dataset classes for different datasets. Theoretically, this means the jump from text to image to multi-modal datasets shouldn't be too crazy.
 

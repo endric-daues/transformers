@@ -1,23 +1,22 @@
 import logging
 import math
 import os
+import pickle
 import sys
 from abc import ABC
 from contextlib import nullcontext
-import pickle
 from dataclasses import asdict
 from datetime import datetime
 from typing import List
 
 import torch
-from torch.utils.data import DataLoader
 import wandb
-
-from models.configs.gpt_config import GPTConfig
-from configs.trainer_config import TrainerConfig
 from configs.sample_config import SampleConfig
+from configs.trainer_config import TrainerConfig
 from datasets.shakespeare import Shakespeare  # fix this import
+from models.configs.gpt_config import GPTConfig
 from models.gpt import GPT
+from torch.utils.data import DataLoader
 
 
 class Trainer(ABC):
