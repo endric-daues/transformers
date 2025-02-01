@@ -11,7 +11,7 @@ This repository is a summary of sorts, as well as a collection of notes and expe
 
 Nevertheless, this was only a starting point. I split the monolithic script into dataset, tokenizer, model, trainer sections, and expanded the config-based runner to allow for a well-documented experiment setup. Modularizing this code makes it easier to exchange the GPT model with a BERT or RoBERTa model, or switch out the character-level tokenizer with a byte-pair encoding setup, or some other fancy pre-trained module. The PyTorch DataLoader seems like a useful feature for maximizing compute utilization in larger training runs, and inheriting a base class means one can easily configure different dataset classes for different datasets. Theoretically, this means the jump from text to image to multi-modal datasets shouldn't be too crazy.
 
-Recently, PyTorch released a matrix multiplication visualizer, which I sought to take advantage of here to provide a visual step-by-step approach to the attention mechanism. Screenshots for a specific attention implementation can be found in the attention notebook. The other notebooks are my way of testing and explaining what else is going on in the code. Sometimes, this is just a matter of checking the dimensions of the tensor going  in and out of a module,
+Recently, PyTorch released a matrix multiplication visualizer, which I sought to take advantage of here to provide a visual step-by-step approach to the attention mechanism. Screenshots for a specific attention implementation can be found in the attention notebook. The other notebooks are my way of testing and explaining what else is going on in the code. Sometimes, this is just a matter of checking the dimensions of the tensor going  in and out of a module.
 
 ## Contents
 
